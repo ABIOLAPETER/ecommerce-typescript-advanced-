@@ -1,6 +1,8 @@
 import jwt from "jsonwebtoken"
 import { RefreshToken } from "../model/refrehToken";
 import crypto from "crypto"
+import * as dotenv from "dotenv";
+dotenv.config()
 
 interface User {
   _id: string;

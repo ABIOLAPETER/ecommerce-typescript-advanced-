@@ -94,6 +94,54 @@ export const registerUser = async (req: Request, res: Response, next: NextFuncti
     }
 };
 
+// VERIFY EMAIL //////////////////////////////////////
+export const verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
+    logger.warn('Verify Email Endpoint Hit.....');
+    const { code } = req.body; // Get verification code from request body
+    try {
+        // Find user by verification token and ensure it hasn't expired
+        const user = await User.findOne({
+            verificationToken: code,
+            verificationTokenExpiresAt: { $gt: Date.now() }
+        });
+
+        if (!user) { // If no matching user, return an error
+            logger.error('Invalid or expired verification code');
+            return res.status(400).json({
+                message: 'Invalid or expired verification code',
+                status: 'fail'
+            });
+        }
+
+        // Mark the user as verified, clear the verification token and expiration
+        user.isverified = true;
+        user.verificationToken = undefined;
+        user.verificationTokenExpiresAt = undefined;
+        await user.save(); // Save changes
+
+        // Send welcome email after successful verification
+        await sendWelcomeEmail(user.email, user.username);
+
+        return res.status(200).json({
+            message: 'Email verified successfully',
+            status: 'success',
+            User: {
+                ...user,
+                password: undefined // Exclude password from response
+            }
+        });
+    } catch (error) {
+        logger.error('Error verifying email:', error);
+        res.status(500).json({
+            message: 'Server error, please try again later',
+            status: 'fail'
+        });
+        next(error);
+    }
+};
+
+
+
 export const loginUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     logger.info('Login Endpoint Hit............');
 
@@ -158,53 +206,8 @@ export const loginUser = async (req: Request, res: Response, next: NextFunction)
     }
 }
 
-// VERIFY EMAIL //////////////////////////////////////
-export const verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
-    logger.warn('Verify Email Endpoint Hit.....');
-    const { code } = req.body; // Get verification code from request body
-    try {
-        // Find user by verification token and ensure it hasn't expired
-        const user = await User.findOne({
-            verificationToken: code,
-            verificationTokenExpiresAt: { $gt: Date.now() }
-        });
 
-        if (!user) { // If no matching user, return an error
-            logger.error('Invalid or expired verification code');
-            return res.status(400).json({
-                message: 'Invalid or expired verification code',
-                status: 'fail'
-            });
-        }
 
-        // Mark the user as verified, clear the verification token and expiration
-        user.isverified = true;
-        user.verificationToken = undefined;
-        user.verificationTokenExpiresAt = undefined;
-        await user.save(); // Save changes
-
-        // Send welcome email after successful verification
-        await sendWelcomeEmail(user.email, user.username);
-
-        return res.status(200).json({
-            message: 'Email verified successfully',
-            status: 'success',
-            User: {
-                ...user,
-                password: undefined // Exclude password from response
-            }
-        });
-    } catch (error) {
-        logger.error('Error verifying email:', error);
-        res.status(500).json({
-            message: 'Server error, please try again later',
-            status: 'fail'
-        });
-        next(error);
-    }
-};
-
-// RESEND VERIFICATION EMAIL //////////////////////////////////////
 export const refreshTokenUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     logger.info('Refresh Token Endpoint Hit.....');
 
@@ -392,7 +395,7 @@ export const getUserProfile = async (req: Request, res: Response, next: NextFunc
     logger.info('Get User Profile Endpoint Hit.....');
 
     try {
-        const id = (req.user as JwtPayload).id;
+        const id = req.params.id;
       const user = await User.findById(id);
         if (!user) {
             logger.error('User not found');
@@ -432,7 +435,7 @@ export const updateUserProfile = async (req: Request, res: Response, next: NextF
     logger.info('Update User Profile Endpoint Hit.....');
     try {
         const { username,address, mobile} = req.body
-        const id = (req.user as JwtPayload).id;
+        const id = req.params.id;
       const user = await User.findById(id);
         if (!user) {
             logger.error('User not found');
@@ -469,7 +472,7 @@ export const updateUserProfile = async (req: Request, res: Response, next: NextF
     logger.error('Error updating user profile:', error);
     res.status(500).json({
         message: 'Server error, please try again later',
-        });
+    });
         next(error);
     }
 }
