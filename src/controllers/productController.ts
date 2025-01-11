@@ -7,7 +7,7 @@
 // - Get products by category
 // - Add product ratings and reviews
 // - Get average rating and reviews for a product
-
+import mongoose, { ObjectId } from "mongoose"
 import { ApiFeatures } from "../utils/ApiFeatures";
 import { logger } from "../utils/logger";
 import { User,invalidateResetToken} from "../model/userModel";
@@ -16,6 +16,8 @@ import { validateReg } from "../utils/validate";
 import { validateLogin } from "../utils/validate";
 import { Request, Response, NextFunction } from "express";
 import { RefreshToken } from "../model/refrehToken";
+import { Category } from "../model/categoryModel";
+
 import {Product} from "../model/productModel"
 import { Review } from "../model/reviewModel";
 import jwt from "jsonwebtoken"
@@ -353,6 +355,68 @@ export const addProductRatingandReview = async (req: Request, res: Response, nex
         });
     } catch (error) {
         logger.error("Couldn't add review and rating:", error);
+        next(error);
+    }
+};
+
+export const addCategoryToProduct = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        logger.warn("Add Category to Product endpoint hit");
+
+        const { categoryId } = req.body;
+        const productId = req.params.id;
+
+        // Validate product existence
+        const product = await Product.findById(productId);
+        if (!product) {
+            logger.error(`Product not found: ${productId}`);
+            return res.status(404).json({
+                status: "fail",
+                message: `Product with ID ${productId} not found`,
+            });
+        }
+
+        // Validate category existence
+        const category = await Category.findById(categoryId);
+        if (!category) {
+            logger.error(`Category not found: ${categoryId}`);
+            return res.status(404).json({
+                status: "fail",
+                message: `Category with ID ${categoryId} not found`,
+            });
+        }
+
+        let productUpdated = false;
+        let categoryUpdated = false;
+
+        // Add category to product
+        if (String(product.category) !== String(categoryId)) {
+            product.category = categoryId;
+            await product.save();
+            productUpdated = true;
+        }
+
+        // Add product to category
+        if (!category.products.includes(productId as unknown as mongoose.Types.ObjectId)) {
+            category.products.push(productId as unknown as mongoose.Types.ObjectId);
+            await category.save();
+            categoryUpdated = true;
+        }
+
+        const message = `${productUpdated ? "Product updated" : ""}${
+            productUpdated && categoryUpdated ? " and " : ""
+        }${categoryUpdated ? "Category updated" : ""}`;
+
+        res.status(200).json({
+            status: "success",
+            message: message || "No changes made",
+            data: {
+                product,
+                category,
+            },
+        });
+    } catch (error) {
+        logger.error("Couldn't add category to product:", error);
         next(error);
     }
 };
